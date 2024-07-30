@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload PDF</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 50px; }
+        form { display: flex; flex-direction: column; width: 300px; }
+        input[type="file"] { margin-bottom: 10px; }
+        input[type="submit"] { padding: 10px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        #progress { margin-top: 20px; }
+        #csv-container {
+            font-family: monospace;
+            white-space: pre;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border: 1px solid #ccc;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #query-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        #query-table th, #query-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        #query-table th {
+            background-color: #f2f2f2;
+            text-align: left;
+        }
+    </style>
+    <button id="finetune-button">Fine-tune</button>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var socket = io.connect('http://' + document.domain + ':' + location.port);
+            var progressDiv = document.getElementById('progress');
+            var csvContainer = document.getElementById('csv-container');
+            var resetButton = document.getElementById('reset-button');
+
+            // Hide the CSV container by default
+            csvContainer.style.display = 'none';
+            resetButton.style.display = 'none';
+
+            socket.on('progress', function(data) {
+                var p = document.createElement('p');
+                p.textContent = data.message;
+                if (data.message.includes("executed successfully")) {
+                    p.className = 'success';
+                } else if (data.message.includes("error")) {
+                    p.className = 'error';
+                } else {
+                    p.className = 'info';
+                }
+                progressDiv.appendChild(p);
+                progressDiv.scrollTop = progressDiv.scrollHeight;  // Auto-scroll to the bottom
+            });
+        
+            socket.on('csv_data', function(data) {
+                csvContainer.innerHTML = ''; // Clear previous content
+                if (data.data && data.data.trim() !== '') {
+                    const table = generateTableFromCSV(data.data);
+                    csvContainer.appendChild(table);
+                    csvContainer.style.display = 'block'; // Show the container
+                } else {
+                    csvContainer.style.display = 'none'; // Hide the container if no data
+                }
+            });
+            socket.on('notebook_execution_complete', function(data) {
+                var p = document.createElement('p');
+                p.textContent = data.message;
+                p.className = data.status === 'success' ? 'success' : 'error';
+                progressDiv.appendChild(p);
+                progressDiv.scrollTop = progressDiv.scrollHeight;
+
+                // Show the reset button
+                resetButton.style.display = 'inline-block';
+            });
+
+            resetButton.addEventListener('click', function() {
+                // Clear all displayed data
+                progressDiv.innerHTML = '';
+                csvContainer.innerHTML = '';
+                csvContainer.style.display = 'none';
+
+                // Hide the reset button
+                resetButton.style.display = 'none';
+
+                // You can add any additional reset logic here
+            });
+            function generateTableFromCSV(csvData) {
+                const table = document.createElement('table');
+                table.style.borderCollapse = 'collapse';
+                table.style.width = '100%';
+                const rows = csvData.trim().split('\n');
+
+                // Create table header
+                const header = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                const headerCells = rows[0].split(',');
+                for (const headerCell of headerCells) {
+                    const th = document.createElement('th');
+                    th.textContent = headerCell;
+                    th.style.backgroundColor = '#f2f2f2';
+                    th.style.border = '1px solid #ddd';
+                    th.style.padding = '8px';
+                    th.style.textAlign = 'left';
+                    headerRow.appendChild(th);
+                }
+                header.appendChild(headerRow);
+                table.appendChild(header);
+
+                // Create table body
+                const body = document.createElement('tbody');
+                for (let i = 1; i < rows.length; i++) {
+                    const row = document.createElement('tr');
+                    const cells = rows[i].split(',');
+                    for (const cell of cells) {
+                        const td = document.createElement('td');
+                        td.textContent = cell;
+                        td.style.border = '1px solid #ddd';
+                        td.style.padding = '8px';
+                        row.appendChild(td);
+                    }
+                    body.appendChild(row);
+                }
+                table.appendChild(body);
+
+                return table;
+            }         
+            var uploadAgainButton = document.getElementById('upload-again');
+            uploadAgainButton.addEventListener('click', function() {
+                csvContainer.innerHTML = '';
+                csvContainer.style.display = 'none'; // Hide the container when uploading again
+                progressDiv.innerHTML = '';
+            });
+        });
+    
+        document.addEventListener('DOMContentLoaded', function() {
+            var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+            // ...
+
+            var queryButton = document.getElementById('query-button');
+            var queryResultDiv = document.getElementById('query-result');
+            var copyButton = document.getElementById('copy-button'); // Define copyButton here
+
+            queryButton.addEventListener('click', function() {
+                var userQuery = [];
+                var tableRows = document.getElementById('query-table').getElementsByTagName('tr');
+                var allFieldsEmpty = true;
+                var allFieldsFilled = true;
+                var anyFieldFilled = false;
+
+                for (var i = 1; i < tableRows.length; i++) { // Start from the second row (skipping the header row)
+                    var rowValues = [];
+                    var cells = tableRows[i].getElementsByTagName('td');
+                    var rowFilled = false;
+
+                    for (var j = 0; j < cells.length; j++) {
+                        var cellValue = cells[j].textContent.trim();
+                        if (cellValue !== '') {
+                            rowValues.push(tableRows[0].getElementsByTagName('th')[j].textContent.trim() + ': ' + cellValue);
+                            rowFilled = true;
+                            anyFieldFilled = true;
+                            allFieldsEmpty = false; // At least one field is not empty
+                        } else {
+                            allFieldsFilled = false; // At least one field is empty
+                        }
+                    }
+
+                    if (rowFilled) {
+                        userQuery.push(rowValues.join(', '));
+                    }
+                }
+
+                if (!anyFieldFilled) {
+                    queryResultDiv.textContent = 'Please fill in at least one field.';
+                    return;
+                }
+
+                if (allFieldsFilled) {
+                    queryResultDiv.textContent = 'Please leave at least one field empty.';
+                    return;
+                }
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '/query', true);
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                        var serverResponse = xhr.responseText;
+                        queryResultDiv.textContent = serverResponse;
+                        populateTableFromResponse(serverResponse);
+                        showCopyButton(); // Show copy button after receiving response
+                    }
+                };
+                xhr.send('user_query=' + encodeURIComponent(userQuery.join(', ')));
+            });
+
+            function populateTableFromResponse(responseText) {
+                var tableBody = document.getElementById('query-table').getElementsByTagName('tbody')[0];
+                var newRow = tableBody.rows[0].cloneNode(true);
+                tableBody.replaceChild(newRow, tableBody.rows[0]);
+
+                var cells = newRow.getElementsByTagName('td');
+                var matches = responseText.split(', ');
+
+                for (var i = 0; i < cells.length; i++) {
+                    if (i < matches.length) {
+                        var cellValue = matches[i].split(': ');
+                        if (cellValue.length === 2) {
+                            if (cells[i].textContent.trim() === '') {
+                                cells[i].textContent = cellValue[1];
+                            }
+                        } else {
+                            if (cells[i].textContent.trim() === '') {
+                                cells[i].textContent = cellValue[0];
+                            }
+                        }
+                    }
+                }
+
+                queryResultDiv.textContent = responseText;
+            }
+            function showCopyButton() {
+                copyButton.style.display = 'inline-block'; // Show the copy button
+            }
+
+            copyButton.addEventListener('click', function() {
+                copyToClipboard(queryResultDiv.textContent);
+            });
+
+            function copyToClipboard(text) {
+                navigator.clipboard.writeText(text)
+                    .then(() => {
+                        console.log('Text copied to clipboard');
+                        // You can provide feedback to the user here if needed
+                    })
+                    .catch(err => {
+                        console.error('Could not copy text: ', err);
+                    });
+            }
+            
+        });
+        document.addEventListener('DOMContentLoaded', function() {
+            // ... (existing code)
+
+            var clearButton = document.getElementById('clear-button');
+            clearButton.addEventListener('click', function() {
+                var queryTableBody = document.getElementById('query-table').getElementsByTagName('tbody')[0];
+                var queryResultDiv = document.getElementById('query-result');
+
+            // Clear the query table cells
+            for (var i = 0; i < queryTableBody.rows.length; i++) {
+                var cells = queryTableBody.rows[i].getElementsByTagName('td');
+                for (var j = 0; j < cells.length; j++) {
+                    cells[j].textContent = '';
+                }
+            }
+
+
+                // Clear the query result div
+                queryResultDiv.textContent = '';
+            });
+        });
+        document.addEventListener('DOMContentLoaded', function() {
+            var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+            socket.on('message_to_browser', function(data) {
+                var messageDiv = document.createElement('div');
+                messageDiv.textContent = data.data;  // Access message directly
+                document.getElementById('messages').appendChild(messageDiv);
+            });
+
+        });
+    
+        document.addEventListener('DOMContentLoaded', function() {
+            var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+            // ...
+
+            var finetuneButton = document.getElementById('finetune-button');
+            finetuneButton.addEventListener('click', function() {
+                fetch('/finetune')
+                    .then(response => {
+                        if (response.ok) {
+                            return response.text();
+                        } else {
+                            throw new Error('Error executing fine-tuning notebook');
+                        }
+                    })
+                    .then(output => {
+                        // Handle the output from the fine-tuning notebook
+                        console.log(output);
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+            });
+
+        });
+    </script>
+</head>
+<body>
+    <h1>Upload PDF</h1>
+    <form action="/upload" method="post" enctype="multipart/form-data" >
+        <input type="file" name="file">
+        <input type="submit" value="Upload">
+    </form>
+    <div id="progress" style="max-height: 3000px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></div>
+    <div id="csv-container"></div>
+    <button id="upload-again">Upload Again</button>
+    <table id="query-table">
+        <thead>
+            <tr>
+                {% for header in headers %}
+                <th>{{ header }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                {% for header in headers %}
+                <td contenteditable></td>
+                {% endfor %}
+            </tr>
+        </tbody>
+    </table>
+
+<button id="query-button">Query</button>
+<button id="clear-button">Clear</button>
+<button id="copy-button" style="display: none;">Copy Raw Data</button>
+<button id="reset-button" style="display: none;">Reset</button>
+
+
+<div id="query-result"></div>
+    <div id="messages" style="max-height: 30px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></div>
+</body>
+
+</html>

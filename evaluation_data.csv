@@ -1,0 +1,5 @@
+Method,App.,Material,Solid,μ,V,h₀,fᵣ,Temp.,w,tvaridity
+LFS^{24},Paper,TiO₂,50 mg/ml,-,150,10³-25-10⁴,23,75-110,50,1 (dry)
+MG^{32},Sensor (flex),Carbon,1120 kg/m³,20,0.3 (web),-,-,130,150,4.31 (dry)
+SD^{73},OPV,P3HT:PCBM,13.5 mg/ml,-,2,-,1.7,140,<305,0.129 (dry)
+SD^{34},TCF,**-**,0.5wt%,**-**,2.7,100,25-Mar,150,260,**-**

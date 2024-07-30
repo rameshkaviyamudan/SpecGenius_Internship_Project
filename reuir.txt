@@ -1,0 +1,4 @@
+pip install nougat-ocr
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
+pip install transformers==4.38.2
+nougat pdf '323.pdf' --out 'output' --recompute --no-skipping
